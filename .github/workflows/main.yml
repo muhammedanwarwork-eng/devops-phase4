@@ -1,4 +1,4 @@
-name: Build and Push to Registry
+name: CI/CD Pipeline Complete
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  pipeline:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -30,3 +30,27 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/devops-phase4:latest
             ghcr.io/${{ github.repository_owner }}/devops-phase4:v1.0
+
+  deploy-to-server:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_NAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "1. Pulling the latest image..."
+            docker pull ghcr.io/${{ github.repository_owner }}/devops-phase4:v1.0
+
+            echo "2. Stopping and Removing the old container..."
+            docker stop my-live-app || true
+            docker rm my-live-app || true
+
+            echo "3. Starting the new container..."
+            docker run -d --name my-live-app -p 80:5000 ghcr.io/${{ github.repository_owner }}/devops-phase4:v1.0
+
+            echo "4. Cleanup old hidden images to save space..."
+            docker image prune -f
